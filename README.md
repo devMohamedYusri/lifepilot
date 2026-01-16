@@ -1,149 +1,126 @@
-# 🚀 LifePilot — Smart Personal Life OS
+# LifePilot 2.0 (2026 Edition)
 
-A local-first personal productivity app with AI-powered categorization and prioritization. All data stored locally in SQLite.
+LifePilot is a comprehensive "Personal Life OS" designed to help you manage tasks, energy, focus, relationships, and decisions with the help of AI agents. It uses a modern tech stack and is designed for both local use and cloud deployment.
 
-![LifePilot](https://img.shields.io/badge/Status-Production%20Ready-brightgreen) ![Python](https://img.shields.io/badge/Python-3.11+-blue) ![React](https://img.shields.io/badge/React-18-61DAFB)
+## 🌟 Key Features
 
----
+*   **Task Management**: Smart inbox, recurring tasks, energy-based planning.
+*   **AI Agent**: Built-in AI assistant ("Antigravity") powered by Groq (Llama 3, Mixtral) for planning, advice, and automation.
+*   **Voice Interface**: Speech-to-text inputs for quick capture.
+*   **Personal CRM**: Track relationships, last contact dates, and interaction history.
+*   **Energy & Focus Logger**: Track your biorhythms to optimize your schedule.
+*   **Decision Journal**: Structured framework for making and reviewing life decisions.
+*   **PWA Support**: Installable on mobile devices with offline capabilities and push notifications.
+*   **Calendar Integration**: 2-way sync with Google Calendar.
 
-## ✨ Features
+## 🏗️ Architecture
 
-- **Universal Inbox** — Capture anything: tasks, notes, decisions, reminders
-- **AI Auto-Categorization** — Automatically classifies and extracts metadata using Groq AI
-- **Today's Focus** — AI-selected priorities for maximum daily impact
-- **Smart Bookmarks** — Web clipping and read-later functionality
-- **Decision Tracking** — Track important decisions with outcomes
-- **Weekly Reviews** — Guided reflection and planning
-- **Personal CRM** — Manage contacts, interactions, and follow-ups
-- **Energy Logger** — Track and analyze energy patterns
-- **Pattern Analysis** — AI-powered insights on your productivity
-- **AI Agent** — Chat-based assistant with tool capabilities
-- **Push Notifications** — Smart reminders (requires VAPID setup)
-- **Calendar Integration** — Google Calendar sync (requires OAuth setup)
-- **Privacy-First** — PII stripping before AI calls, all data stored locally
-- **Beautiful Dark UI** — Premium glassmorphism design with smooth animations
-- **Responsive Design** — Works seamlessly on desktop, tablet, and mobile
+The project is split into two separate applications:
 
----
-
-## 🛠️ Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Backend | Python 3.11+, FastAPI, SQLite |
-| Frontend | React 18, Vite, TailwindCSS |
-| AI | Groq API (llama3-8b-8192, llama3-70b-8192) |
+*   **Backend**: Python **FastAPI** application.
+    *   REST API, Background Workers, AI Integration.
+    *   Database: **SQLite** (Local) or **Turso/libSQL** (Production).
+    *   Hosting: **Koyeb** (Recommended Free Tier).
+*   **Frontend**: **React** application built with **Vite**.
+    *   TailwindCSS for styling.
+    *   PWA credentials.
+    *   Hosting: **Cloudflare Pages** (Recommended Free Tier).
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started (Local Development)
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Groq API Key ([Get one free](https://console.groq.com))
-
-### 1. Clone & Setup Environment
-
-```bash
-cd lifepilot
-cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
-```
+### 1. Prerequisites
+*   Python 3.11+
+*   Node.js 18+ (and npm)
+*   Git
 
 ### 2. Backend Setup
 
 ```bash
 cd backend
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+
+# Configure Environment
+cp .env.example .env
+# Edit .env and add your GROQ_API_KEY (from console.groq.com)
+
+# Start Server
+python -m uvicorn main:app --reload
 ```
+*Backend runs on: `http://localhost:8000`*
+*API Docs: `http://localhost:8000/docs`*
 
 ### 3. Frontend Setup
 
 ```bash
 cd frontend
+
+# Install dependencies
 npm install
+
+# Start Dev Server
 npm run dev
 ```
-
-### 4. Open in Browser
-
-Navigate to **http://localhost:5173**
+*Frontend runs on: `http://localhost:5173`*
 
 ---
 
-## � Production Deployment
+## ☁️ Deployment Guide (Free Tier)
 
-### Environment Variables
+This stack is optimized for $0/month hosting using **Koyeb** (Backend) and **Cloudflare Pages** (Frontend).
 
-Create a `.env` file in the project root:
+### Phase 1: Database (Turso)
+1.  Sign up at [turso.tech](https://turso.tech).
+2.  Create a database.
+3.  Get the **Database URL** (`libsql://...`) and **Auth Token**.
+4.  These will be environment variables for your backend.
 
-```bash
-# Required
-GROQ_API_KEY=your_production_groq_api_key
+### Phase 2: Backend (Koyeb)
+1.  Push your code to GitHub.
+2.  Sign up at [koyeb.com](https://www.koyeb.com).
+3.  Create a new **Web Service** from your GitHub repository.
+4.  **Root Directory**: `backend`
+5.  **Build Command**: `pip install -r requirements.txt`
+6.  **Run Command**: `uvicorn main:app --host 0.0.0.0 --port 8000`
+7.  **Environment Variables**:
+    *   `GROQ_API_KEY`: Your key.
+    *   `TURSO_DATABASE_URL`: From Phase 1.
+    *   `TURSO_AUTH_TOKEN`: From Phase 1.
+    *   `VAPID_...`: See *Push Notifications* section.
+    *   `GOOGLE_...`: See *Integrations* section.
+    *   `CORS_ORIGINS`: `https://your-frontend.pages.dev` (Add this AFTER deploying frontend).
 
-# Optional (defaults shown)
-DATABASE_PATH=./database/lifepilot.db
-ENVIRONMENT=production
-CORS_ORIGINS=["http://localhost:5173","https://yourdomain.com"]
-```
+### Phase 3: Frontend (Cloudflare Pages)
+1.  Sign up at [pages.cloudflare.com](https://pages.cloudflare.com).
+2.  Create a project -> Connect to GitHub.
+3.  **Root Directory**: `frontend`
+4.  **Build Command**: `npm run build`
+5.  **Output Directory**: `dist`
+6.  **Environment Variables**:
+    *   `VITE_API_URL`: `https://your-app-name.koyeb.app/api` (URL of your deployed backend).
 
-### Option 1: Local Production Server
+---
 
-**Backend:**
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8000
-```
+## 🔌 Integrations Configuration
 
-**Frontend:**
-```bash
-cd frontend
-npm run build
-npm run preview
-```
+### Push Notifications
+1.  Generate keys: `vapid --gen` (install `py-vapid` first).
+2.  Add to Backend Env: `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_EMAIL`.
+3.  The frontend will automatically use these to subscribe users.
 
-### Option 2: Docker Deployment (Recommended)
-
-**Backend Dockerfile:**
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY backend/ .
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**Frontend Dockerfile:**
-```dockerfile
-FROM node:18-alpine AS build
-WORKDIR /app
-COPY frontend/package*.json ./
-RUN npm ci
-COPY frontend/ .
-RUN npm run build
-
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-```
-
-### Option 3: Cloud Deployment
-
-**Backend (Railway, Render, Fly.io):**
-- Set environment variables in platform dashboard
-- Deploy from `backend/` directory
-- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-
-**Frontend (Vercel, Netlify):**
-- Build command: `npm run build`
-- Output directory: `dist`
-- Add environment variable for API URL if needed
+### Google Calendar
+1.  Go to Google Cloud Console -> APIs & Services -> Credentials.
+2.  Create OAuth 2.0 Web Client.
+3.  **Local Redirect URI**: `http://localhost:8000/api/auth/google/callback`
+4.  **Production Redirect URI**: `https://your-backend.koyeb.app/api/auth/google/callback`
+5.  Add Client ID/Secret to Backend Env: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
 ---
 
@@ -151,135 +128,21 @@ EXPOSE 80
 
 ```
 lifepilot/
-├── backend/
-│   ├── main.py              # FastAPI app
-│   ├── database.py          # SQLite management
-│   ├── models.py            # Pydantic models
-│   ├── routers/             # 17 API routers
-│   └── services/            # Business logic & AI services
-├── frontend/
-│   └── src/
-│       ├── App.jsx
-│       ├── components/      # 16+ React components
-│       └── hooks/           # Custom React hooks
-├── database/                # SQLite database
+├── backend/             # FastAPI App
+│   ├── core/           # Config & Logging
+│   ├── database/       # DB connection (SQLite/Turso)
+│   ├── routers/        # API Endpoints
+│   ├── services/       # Business Logic
+│   ├── requirements.txt
+│   └── main.py         # Entry point
+│
+├── frontend/            # React App
+│   ├── src/
+│   │   ├── api/        # API Client
+│   │   ├── components/ # Reusable UI components
+│   │   ├── hooks/      # Custom React hooks
+│   │   └── pages/      # App screens
+│   ├── public/         # Static assets & Service Worker
+│   └── vite.config.js
+│
 └── README.md
-```
-
----
-
-## 🔌 API Endpoints (17 Routers)
-
-| Router | Description |
-|--------|-------------|
-| Items | CRUD operations, follow-ups |
-| Focus | AI-powered daily priorities |
-| Bookmarks | Bookmark management |
-| Decisions | Decision tracking |
-| Reviews | Weekly reviews |
-| Contacts | Personal CRM |
-| Energy | Energy logging |
-| Notifications | Smart notifications |
-| Patterns | Pattern analysis |
-| Suggestions | AI suggestions |
-| Calendar | Calendar integration |
-| Auth | OAuth authentication |
-| Voice | Voice input |
-| Push | Push notifications |
-| Agent | LangGraph agent |
-| Scheduler | Background tasks |
-| Search | Natural language search |
-
-**API Documentation:** `http://localhost:8000/docs`
-
----
-
-## 📱 Responsive Design
-
-| Viewport | Navigation | Features |
-|----------|------------|----------|
-| **Desktop** (≥1024px) | 9 tabs in header | Full features |
-| **Tablet** (768-1023px) | Adaptive | Touch-friendly |
-| **Mobile** (<768px) | 5 tabs bottom nav | Optimized UI |
-
-### Mobile Navigation Tabs
-- 📥 Inbox → Tasks
-- 🎯 Focus → Today's Focus
-- 🔖 Saved → Bookmarks
-- 👥 People → Contacts
-- ⚙️ Settings
-
----
-
-## 🧠 AI Models Used
-
-- **llama3-8b-8192** — Fast categorization (~200ms)
-- **llama3-70b-8192** — Smart focus selection (~1s)
-
----
-
-## 🔒 Privacy & Security
-
-- All data stored locally in `./database/lifepilot.db`
-- PII (emails, phones, names) stripped before AI calls
-- No data sent to cloud except anonymized text to Groq
-- CORS configured for allowed origins
-
-### Production Security Checklist
-- [ ] Update CORS origins for production domain
-- [ ] Enable HTTPS in production
-- [ ] Set up rate limiting
-- [ ] Secure API keys in environment variables
-
----
-
-## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| Build Time | 3.80s |
-| Bundle Size | 305.71 kB (82.87 kB gzipped) |
-| CSS Size | 46.56 kB (8.59 kB gzipped) |
-| Startup Time | <2s |
-| Health Check | <50ms |
-
----
-
-## 🧪 Verification
-
-### Health Checks
-```bash
-# Backend health
-curl http://localhost:8000/api/health
-
-# Run production tests
-cd backend
-python verify_production.py
-```
-
-### Post-Deployment
-- [ ] Verify health endpoint
-- [ ] Test all navigation tabs
-- [ ] Check responsive layout on real devices
-- [ ] Monitor error logs
-
----
-
-## ⚠️ Known Limitations
-
-1. **Push Notifications**: Requires VAPID keys to be configured
-2. **Calendar Integration**: Requires OAuth setup for Google Calendar
-3. **Voice Input**: Requires Whisper API configuration
-4. **Service Worker**: Currently disabled (can be enabled for offline support)
-
----
-
-## 📝 License
-
-MIT
-
----
-
-**Version:** 2.4.0  
-**Status:** ✅ Production Ready  
-**Last Updated:** 2026-01-16

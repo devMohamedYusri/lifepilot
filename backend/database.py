@@ -12,13 +12,28 @@ def get_db_path() -> str:
     return settings.get_db_path()
 
 
-def get_connection() -> sqlite3.Connection:
-    """Create a new database connection."""
-    db_path = get_db_path()
-    # Ensure directory exists
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+def get_connection():
+    """Create a new database connection (Local SQLite or Turso)."""
+    import os
+    turso_url = os.getenv("TURSO_DATABASE_URL")
+    turso_token = os.getenv("TURSO_AUTH_TOKEN")
+    
+    if turso_url and turso_token:
+        # Remote Turso Connection
+        import libsql
+        conn = libsql.connect(database=turso_url, auth_token=turso_token)
+    else:
+        # Local SQLite Connection
+        db_path = get_db_path()
+        # Ensure directory exists
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path)
+    
+    # Common row factory setup if supported by list (libsql might wrap it differently)
+    # For standard sqlite3 compatibility where possible
+    if hasattr(conn, 'row_factory'):
+        conn.row_factory = sqlite3.Row
+        
     return conn
 
 
