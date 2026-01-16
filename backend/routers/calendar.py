@@ -89,7 +89,7 @@ async def remove_connection(connection_id: int):
 @router.post("/sync/{connection_id}")
 async def trigger_sync(
     connection_id: int,
-    direction: str = Query("bidirectional", regex="^(import|export|bidirectional)$")
+    direction: str = Query("bidirectional", pattern="^(import|export|bidirectional)$")
 ):
     """
     Trigger calendar sync for a connection.
@@ -140,7 +140,7 @@ async def list_events(
 
 @router.get("/free-blocks", response_model=List[FreeBlockResponse])
 async def list_free_blocks(
-    date: str = Query(..., regex=r"^\d{4}-\d{2}-\d{2}$"),
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     min_duration: Optional[int] = None
 ):
     """
@@ -153,7 +153,7 @@ async def list_free_blocks(
 
 @router.get("/focus-suggestion")
 async def get_focus_suggestion(
-    date: str = Query(..., regex=r"^\d{4}-\d{2}-\d{2}$"),
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
     duration: int = 90
 ):
     """
@@ -177,7 +177,7 @@ async def check_time_availability(start_time: str, end_time: str):
 
 @router.get("/day-summary")
 async def get_day_schedule_summary(
-    date: str = Query(..., regex=r"^\d{4}-\d{2}-\d{2}$")
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
 ):
     """
     Get a summary of the day's schedule.

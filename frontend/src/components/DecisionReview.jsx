@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import { decisionsApi } from '../api/client';
+import useDecisions from '../hooks/useDecisions';
+import { ListSkeleton, ItemCardSkeleton } from './common/Skeleton';
+import { EmptyDecisions } from './common/EmptyState';
 
 /**
  * Status config for decisions
@@ -14,35 +17,25 @@ const STATUS_CONFIG = {
 /**
  * Decision Card component
  */
-function DecisionCard({ decision, onUpdate, onRecordOutcome }) {
+function DecisionCard({ decision, onRecordOutcome, recordOutcomeApi }) {
+    const [loading, setLoading] = useState(false);
     const [showOutcome, setShowOutcome] = useState(false);
     const [outcomeData, setOutcomeData] = useState({
         actual_outcome: '',
         outcome_rating: 3,
         expectation_matched: 3,
-        lessons: '',
-        would_change: '',
+        lessons: ''
     });
-    const [loading, setLoading] = useState(false);
 
     const status = STATUS_CONFIG[decision.status] || STATUS_CONFIG.deliberating;
-
-    // Parse options
-    let options = [];
-    try {
-        options = JSON.parse(decision.options || '[]');
-    } catch (e) { }
-
-    // Parse tags
-    let tags = [];
-    try {
-        tags = JSON.parse(decision.tags || '[]');
-    } catch (e) { }
+    const tags = JSON.parse(decision.tags || '[]');
+    const options = JSON.parse(decision.options || '[]');
 
     const handleRecordOutcome = async () => {
         setLoading(true);
         try {
-            const updated = await decisionsApi.recordOutcome(decision.id, outcomeData);
+            const apiFunc = recordOutcomeApi || decisionsApi.recordOutcome;
+            const updated = await apiFunc(decision.id, outcomeData);
             if (onRecordOutcome) onRecordOutcome(decision.id, updated);
             setShowOutcome(false);
         } catch (err) {
@@ -254,37 +247,40 @@ function InsightsPanel({ insights }) {
  * Main DecisionReview component
  */
 export default function DecisionReview() {
-    const [decisions, setDecisions] = useState([]);
+    const [statusFilter, setStatusFilter] = useState('');
+
+    const {
+        decisions,
+        isLoading: loading,
+        setFilters,
+        recordOutcome: hookRecordOutcome
+    } = useDecisions({ status: statusFilter });
+
+    // Sync filter changes
+    useEffect(() => {
+        setFilters({ status: statusFilter });
+    }, [statusFilter, setFilters]);
+
     const [dueForReview, setDueForReview] = useState([]);
     const [stats, setStats] = useState(null);
     const [insights, setInsights] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState('');
     const [showInsights, setShowInsights] = useState(false);
     const [loadingInsights, setLoadingInsights] = useState(false);
 
     useEffect(() => {
-        fetchData();
+        fetchStatsAndDue();
     }, [statusFilter]);
 
-    const fetchData = async () => {
+    const fetchStatsAndDue = async () => {
         try {
-            const filters = {};
-            if (statusFilter) filters.status = statusFilter;
-
-            const [decisionsData, dueData, statsData] = await Promise.all([
-                decisionsApi.list(filters),
+            const [dueData, statsData] = await Promise.all([
                 decisionsApi.dueForReview(),
                 decisionsApi.getStats(),
             ]);
-
-            setDecisions(decisionsData);
             setDueForReview(dueData);
             setStats(statsData);
         } catch (err) {
-            console.error('Failed to fetch decisions:', err);
-        } finally {
-            setLoading(false);
+            console.error('Failed to fetch stats:', err);
         }
     };
 
@@ -301,10 +297,8 @@ export default function DecisionReview() {
         }
     };
 
-    const handleOutcomeRecorded = (id, updated) => {
-        setDecisions(prev => prev.map(d => d.id === id ? updated : d));
-        setDueForReview(prev => prev.filter(d => d.id !== id));
-        fetchData();
+    const handleOutcomeRecorded = async () => {
+        fetchStatsAndDue();
     };
 
     const STATUS_TABS = [
@@ -385,17 +379,9 @@ export default function DecisionReview() {
 
             {/* Decisions List */}
             {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <div className="flex items-center gap-3 text-primary-400">
-                        <div className="spinner"></div>
-                        <span>Loading decisions...</span>
-                    </div>
-                </div>
+                <ListSkeleton count={4} CardSkeleton={ItemCardSkeleton} />
             ) : decisions.length === 0 ? (
-                <div className="glass rounded-xl p-12 text-center">
-                    <div className="text-4xl mb-3">🎯</div>
-                    <p className="text-surface-200">No decisions found. Decisions are created from items marked as "decision" type.</p>
-                </div>
+                <EmptyDecisions />
             ) : (
                 <div className="space-y-4">
                     {decisions.map(decision => (
@@ -403,6 +389,7 @@ export default function DecisionReview() {
                             key={decision.id}
                             decision={decision}
                             onRecordOutcome={handleOutcomeRecorded}
+                            recordOutcomeApi={hookRecordOutcome}
                         />
                     ))}
                 </div>

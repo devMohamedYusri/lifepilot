@@ -165,9 +165,6 @@ async def send_push_notification(
     """
     Send a push notification to a single subscription.
     
-    Note: Requires pywebpush library for production use.
-    This is a placeholder that logs the notification.
-    
     Args:
         subscription: Subscription record from database
         title: Notification title
@@ -195,30 +192,40 @@ async def send_push_notification(
             "actions": actions or []
         }
         
-        # In production, use pywebpush:
-        # from pywebpush import webpush, WebPushException
-        # webpush(
-        #     subscription_info={
-        #         "endpoint": subscription['endpoint'],
-        #         "keys": {
-        #             "p256dh": subscription['p256dh_key'],
-        #             "auth": subscription['auth_key']
-        #         }
-        #     },
-        #     data=json.dumps(payload),
-        #     vapid_private_key=VAPID_PRIVATE_KEY,
-        #     vapid_claims={"sub": VAPID_EMAIL}
-        # )
+        # Send actual push notification using pywebpush
+        from pywebpush import webpush, WebPushException
         
-        logger.info(f"Push notification sent: {title} -> {subscription.get('device_name', 'unknown device')}")
-        
-        # Update last_used_at
-        execute_write(
-            "UPDATE push_subscriptions SET last_used_at = ? WHERE id = ?",
-            (datetime.now().isoformat(), subscription['id'])
-        )
-        
-        return True
+        try:
+            webpush(
+                subscription_info={
+                    "endpoint": subscription['endpoint'],
+                    "keys": {
+                        "p256dh": subscription['p256dh_key'],
+                        "auth": subscription['auth_key']
+                    }
+                },
+                data=json.dumps(payload),
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_EMAIL}
+            )
+            
+            logger.info(f"Push notification sent: {title} -> {subscription.get('device_name', 'unknown device')}")
+            
+            # Update last_used_at
+            execute_write(
+                "UPDATE push_subscriptions SET last_used_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), subscription['id'])
+            )
+            
+            return True
+            
+        except WebPushException as e:
+            logger.error(f"WebPush failed: {e}")
+            # If subscription is invalid, disable it
+            if e.response and e.response.status_code in (404, 410):
+                logger.warning(f"Subscription expired, disabling: {subscription.get('id')}")
+                disable_subscription(subscription['endpoint'])
+            return False
         
     except Exception as e:
         logger.error(f"Failed to send push notification: {e}")

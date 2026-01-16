@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 
-const MOBILE_BREAKPOINT = 768;
+const MOBILE_BREAKPOINT = 1024;
 
 export function useMobile() {
     const [isMobile, setIsMobile] = useState(

@@ -91,3 +91,27 @@ class AuthenticationError(LifePilotException):
             message=message,
             status_code=401
         )
+
+
+class AIServiceError(ExternalServiceError):
+    """Specific error for AI service failures."""
+    
+    def __init__(
+        self, 
+        message: str, 
+        provider: str = "groq", 
+        code: str = "ai_error",
+        status_code: int = 503
+    ):
+        super().__init__(
+            service=provider,
+            message=message,
+        )
+        self.code = code
+        self.status_code = status_code
+        self.details["code"] = code
+
+    def to_dict(self) -> Dict[str, Any]:
+        result = super().to_dict()
+        result["code"] = self.code
+        return result

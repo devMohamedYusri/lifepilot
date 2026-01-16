@@ -1,11 +1,15 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { bookmarksApi } from '../api/client';
+import useBookmarks from '../hooks/useBookmarks';
 import BookmarkCard from './BookmarkCard';
+import { ListSkeleton, BookmarkCardSkeleton } from './common/Skeleton';
+import { EmptyBookmarks } from './common/EmptyState';
 
 /**
  * Reading Queue component with time/energy selectors
  */
-function ReadingQueue({ onStartReading }) {
+function ReadingQueue() {
+    // Kept as separate logic for now as it's a specific calculation view
     const [minutes, setMinutes] = useState(30);
     const [energy, setEnergy] = useState('medium');
     const [queue, setQueue] = useState(null);
@@ -121,39 +125,27 @@ function ReadingQueue({ onStartReading }) {
  * Main Bookmark Manager component
  */
 export default function BookmarkManager() {
-    const [bookmarks, setBookmarks] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    const {
+        bookmarks,
+        isLoading: loading,
+        error,
+        refresh,
+        createBookmark,
+        updateBookmark,
+        deleteBookmark,
+        filters,
+        updateFilters
+    } = useBookmarks();
+
     const [newUrl, setNewUrl] = useState('');
     const [adding, setAdding] = useState(false);
     const [stats, setStats] = useState(null);
 
-    // Filters
-    const [statusFilter, setStatusFilter] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [searchQuery, setSearchQuery] = useState('');
-
+    // Initial load
     useEffect(() => {
-        fetchBookmarks();
+        refresh();
         fetchStats();
-    }, [statusFilter, categoryFilter, searchQuery]);
-
-    const fetchBookmarks = async () => {
-        try {
-            const filters = {};
-            if (statusFilter) filters.status = statusFilter;
-            if (categoryFilter) filters.category = categoryFilter;
-            if (searchQuery) filters.search = searchQuery;
-
-            const data = await bookmarksApi.list(filters);
-            setBookmarks(data);
-            setError(null);
-        } catch (err) {
-            setError(err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
+    }, []);
 
     const fetchStats = async () => {
         try {
@@ -170,24 +162,23 @@ export default function BookmarkManager() {
 
         setAdding(true);
         try {
-            const bookmark = await bookmarksApi.create(newUrl.trim());
-            setBookmarks(prev => [bookmark, ...prev]);
+            await createBookmark(newUrl.trim(), 'manual');
             setNewUrl('');
             fetchStats();
         } catch (err) {
-            setError(err.message);
+            // Error handled by hook logic or local check if needed
         } finally {
             setAdding(false);
         }
     };
 
-    const handleUpdate = (id, updated) => {
-        setBookmarks(prev => prev.map(b => b.id === id ? { ...b, ...updated } : b));
+    const handleUpdate = async (id, updated) => {
+        await updateBookmark(id, updated);
         fetchStats();
     };
 
-    const handleDelete = (id) => {
-        setBookmarks(prev => prev.filter(b => b.id !== id));
+    const handleDelete = async (id) => {
+        await deleteBookmark(id);
         fetchStats();
     };
 
@@ -243,8 +234,8 @@ export default function BookmarkManager() {
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3">
                 <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    value={filters.status || ''}
+                    onChange={(e) => updateFilters({ status: e.target.value })}
                     className="px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white"
                 >
                     <option value="">All Status</option>
@@ -255,8 +246,8 @@ export default function BookmarkManager() {
                 </select>
 
                 <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    value={filters.category || ''}
+                    onChange={(e) => updateFilters({ category: e.target.value })}
                     className="px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white"
                 >
                     <option value="">All Categories</option>
@@ -270,8 +261,8 @@ export default function BookmarkManager() {
 
                 <input
                     type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    value={filters.search || ''}
+                    onChange={(e) => updateFilters({ search: e.target.value })}
                     placeholder="Search..."
                     className="px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg text-white placeholder-surface-400"
                 />
@@ -280,23 +271,15 @@ export default function BookmarkManager() {
             {/* Error */}
             {error && (
                 <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-                    ⚠️ {error}
+                    ⚠️ {error.message || 'Error loading bookmarks'}
                 </div>
             )}
 
             {/* Bookmark list */}
             {loading ? (
-                <div className="flex items-center justify-center py-12">
-                    <div className="flex items-center gap-3 text-primary-400">
-                        <div className="spinner"></div>
-                        <span>Loading bookmarks...</span>
-                    </div>
-                </div>
+                <ListSkeleton count={5} CardSkeleton={BookmarkCardSkeleton} />
             ) : bookmarks.length === 0 ? (
-                <div className="glass rounded-xl p-12 text-center">
-                    <div className="text-4xl mb-3">📚</div>
-                    <p className="text-surface-200">No bookmarks yet. Paste a URL above to get started!</p>
-                </div>
+                <EmptyBookmarks />
             ) : (
                 <div className="space-y-3">
                     {bookmarks.map(bookmark => (

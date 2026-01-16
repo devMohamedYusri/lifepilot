@@ -1,14 +1,31 @@
 import { useState, useEffect } from 'react';
 import { contactsApi } from '../api/client';
+import useContacts from '../hooks/useContacts';
+import { ListSkeleton, ContactCardSkeleton } from './common/Skeleton';
+import { EmptyContacts } from './common/EmptyState';
 
 /**
  * Personal CRM - Contacts Manager
  */
 export default function ContactsManager() {
-    const [contacts, setContacts] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('all');
+
+    // Derived params for the hook
+    const queryParams = {
+        ...(filter !== 'all' && { relationship_type: filter }),
+        ...(search && { search })
+    };
+
+    const {
+        contacts,
+        isLoading: loading,
+        refresh: refreshContacts,
+        createContact,
+        updateContact, // Not currently used directly but available
+        deleteContact // Not currently used directly but available
+    } = useContacts(queryParams);
+
     const [needsAttention, setNeedsAttention] = useState({ overdue_contacts: [], upcoming_dates: [] });
     const [stats, setStats] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -16,25 +33,11 @@ export default function ContactsManager() {
     const [showInteractionModal, setShowInteractionModal] = useState(null);
 
     useEffect(() => {
-        fetchContacts();
         fetchNeedsAttention();
         fetchStats();
-    }, [filter]);
+    }, [filter]); // Refresh stats when filter changes? Maybe not needed but harmless.
 
-    const fetchContacts = async () => {
-        try {
-            const params = {};
-            if (filter !== 'all') params.relationship_type = filter;
-            if (search) params.search = search;
-            const data = await contactsApi.list(params);
-            setContacts(data);
-        } catch (err) {
-            console.error('Failed to fetch contacts:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
+    // Independent fetches
     const fetchNeedsAttention = async () => {
         try {
             const data = await contactsApi.needsAttention();
@@ -55,14 +58,13 @@ export default function ContactsManager() {
 
     const handleSearch = (e) => {
         e.preventDefault();
-        fetchContacts();
+        // Search is handled by reactive params passed to hook
     };
 
     const handleAddContact = async (contactData) => {
         try {
-            await contactsApi.create(contactData);
+            await createContact(contactData);
             setShowAddModal(false);
-            fetchContacts();
             fetchStats();
         } catch (err) {
             console.error('Failed to create contact:', err);
@@ -73,7 +75,7 @@ export default function ContactsManager() {
         try {
             await contactsApi.logInteraction(contactId, interactionData);
             setShowInteractionModal(null);
-            fetchContacts();
+            refreshContacts(); // Refresh list to update 'last contact'
             fetchNeedsAttention();
         } catch (err) {
             console.error('Failed to log interaction:', err);
@@ -114,11 +116,14 @@ export default function ContactsManager() {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center py-12">
-                <div className="flex items-center gap-3 text-primary-400">
-                    <div className="spinner"></div>
-                    <span>Loading contacts...</span>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-bold text-white">👥 People</h2>
+                        <p className="text-surface-300">Manage your relationships and stay connected</p>
+                    </div>
                 </div>
+                <ListSkeleton count={6} CardSkeleton={ContactCardSkeleton} />
             </div>
         );
     }
@@ -175,8 +180,8 @@ export default function ContactsManager() {
                             key={type.value}
                             onClick={() => setFilter(type.value)}
                             className={`px-3 py-1.5 rounded-lg text-sm transition-all ${filter === type.value
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-300 hover:bg-white/5'
+                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                : 'text-surface-300 hover:bg-white/5'
                                 }`}
                         >
                             {type.label}
@@ -189,12 +194,7 @@ export default function ContactsManager() {
                 {/* Contacts Grid */}
                 <div className="lg:col-span-3">
                     {contacts.length === 0 ? (
-                        <div className="glass rounded-xl p-12 text-center">
-                            <div className="text-5xl mb-4">👥</div>
-                            <h3 className="text-xl font-semibold text-white mb-2">No Contacts Yet</h3>
-                            <p className="text-surface-300 mb-6">Add your first contact to start building your personal CRM.</p>
-                            <button onClick={() => setShowAddModal(true)} className="btn-primary">+ Add Contact</button>
-                        </div>
+                        <EmptyContacts onAdd={() => setShowAddModal(true)} />
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {contacts.map(contact => (
@@ -212,9 +212,9 @@ export default function ContactsManager() {
                                             <div className="flex items-center gap-2">
                                                 <h3 className="text-white font-medium truncate">{contact.name}</h3>
                                                 <span className={`badge text-xs ${contact.relationship_type === 'family' ? 'bg-pink-500/20 text-pink-400' :
-                                                        contact.relationship_type === 'friend' ? 'bg-green-500/20 text-green-400' :
-                                                            contact.relationship_type === 'colleague' ? 'bg-blue-500/20 text-blue-400' :
-                                                                'bg-surface-500/30 text-surface-300'
+                                                    contact.relationship_type === 'friend' ? 'bg-green-500/20 text-green-400' :
+                                                        contact.relationship_type === 'colleague' ? 'bg-blue-500/20 text-blue-400' :
+                                                            'bg-surface-500/30 text-surface-300'
                                                     }`}>
                                                     {contact.relationship_type}
                                                 </span>
@@ -297,7 +297,7 @@ export default function ContactsManager() {
                     contact={selectedContact}
                     onClose={() => setSelectedContact(null)}
                     onLogInteraction={(type) => setShowInteractionModal({ contact: selectedContact, type })}
-                    onUpdate={() => { fetchContacts(); setSelectedContact(null); }}
+                    onUpdate={() => { refreshContacts(); setSelectedContact(null); }}
                 />
             )}
 
@@ -613,8 +613,8 @@ function InteractionLoggerModal({ contact, defaultType, onClose, onSave }) {
                                 type="button"
                                 onClick={() => setFormData(prev => ({ ...prev, type: type.value }))}
                                 className={`px-3 py-1.5 rounded-lg text-sm transition-all ${formData.type === type.value
-                                        ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                        : 'glass text-surface-300 hover:bg-white/5'
+                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                    : 'glass text-surface-300 hover:bg-white/5'
                                     }`}
                             >
                                 {type.label}
@@ -662,8 +662,8 @@ function InteractionLoggerModal({ contact, defaultType, onClose, onSave }) {
                                     type="button"
                                     onClick={() => setFormData(prev => ({ ...prev, mood: mood.value }))}
                                     className={`px-3 py-1.5 rounded-lg text-sm ${formData.mood === mood.value
-                                            ? 'bg-primary-500/20 text-primary-400'
-                                            : 'glass text-surface-300'
+                                        ? 'bg-primary-500/20 text-primary-400'
+                                        : 'glass text-surface-300'
                                         }`}
                                 >
                                     {mood.label}

@@ -10,12 +10,10 @@ from core.exceptions import LifePilotException
 from database import init_db, get_connection
 from routers import items, focus, decisions, bookmarks, search, reviews, contacts, energy, notifications, patterns, suggestions, calendar, auth, voice, push, agent, scheduler
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG if settings.debug else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+from core.logging import setup_logging
+
+# Setup logging
+logger = setup_logging()
 
 
 @asynccontextmanager

@@ -27,7 +27,7 @@ const CONVERSATION_STARTERS = [
     { icon: '⚡', text: "Help me plan my week" }
 ];
 
-const AgentChat = () => {
+const AgentChat = ({ isFloating = false, onClose = null }) => {
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [sessionId, setSessionId] = useState(null);
@@ -85,7 +85,7 @@ const AgentChat = () => {
     const showWelcome = () => {
         setMessages([{
             role: 'assistant',
-            content: "👋 Hello! I'm your LifePilot assistant.\n\nI can help you manage tasks, track contacts, plan your day, and more. Try asking me something!",
+            content: "👋 Hello! I'm your LifePilot assistant.\\n\\nI can help you manage tasks, track contacts, plan your day, and more. Try asking me something!",
             created_at: new Date().toISOString()
         }]);
         setSuggestions(CONVERSATION_STARTERS.map(s => s.text));
@@ -221,7 +221,7 @@ const AgentChat = () => {
     };
 
     return (
-        <div className="flex h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] max-w-5xl mx-auto">
+        <div className={`flex ${isFloating ? 'h-full' : 'h-[calc(100vh-140px)] md:h-[calc(100vh-100px)] max-w-5xl mx-auto'}`}>
 
             {/* History Sidebar */}
             {showHistory && (

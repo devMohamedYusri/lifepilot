@@ -171,6 +171,20 @@ export default function CalendarSettings() {
                 </div>
             </div>
 
+            {/* Google Auth Requirement Banner */}
+            <div className="bg-blue-500/10 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                <div className="flex items-start gap-3">
+                    <span className="text-2xl">ℹ️</span>
+                    <div>
+                        <h3 className="font-semibold text-blue-200">Google Authentication Required</h3>
+                        <p className="text-blue-100/80 text-sm mt-1">
+                            You must connect your Google and/or Outlook account securely before you can use the calendar features.
+                            Please complete the setup below to enable synchronization.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
             {error && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-red-300">
                     {error}

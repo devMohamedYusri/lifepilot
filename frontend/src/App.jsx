@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { itemsApi, suggestionsApi } from './api/client';
+import useItems from './hooks/useItems';
 import InboxInput from './components/InboxInput';
 import TodayFocus from './components/TodayFocus';
 import Dashboard from './components/Dashboard';
@@ -11,20 +12,41 @@ import EnergyDashboard from './components/EnergyDashboard';
 import NotificationBell from './components/NotificationBell';
 import SearchBar from './components/SearchBar';
 import PatternDashboard from './components/PatternDashboard';
-import AgentChat from './components/AgentChat';
 import CalendarSettings from './components/CalendarSettings';
 import { SuggestionToastContainer } from './components/SuggestionToast';
 import MobileNav from './components/MobileNav';
 import OfflineBanner from './components/OfflineBanner';
+import FloatingAgent from './components/FloatingAgent';
 import { useMobile } from './hooks/useMobile';
 
 /**
  * LifePilot - Smart Personal Life OS
  */
+import GlobalErrorBoundary from './components/common/GlobalErrorBoundary';
+
+/**
+ * LifePilot - Smart Personal Life OS
+ */
 export default function App() {
-    const [items, setItems] = useState([]);
+    return (
+        <GlobalErrorBoundary>
+            <AppContent />
+        </GlobalErrorBoundary>
+    );
+}
+
+function AppContent() {
+    const {
+        items,
+        isLoading: itemsLoading,
+        error: itemsError,
+        refresh: refreshItems,
+        createItem: hookCreateItem,
+        updateItem: hookUpdateItem,
+        deleteItem: hookDeleteItem
+    } = useItems(); // Default filters
+
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
     const [needsFollowupIds, setNeedsFollowupIds] = useState([]);
     const [suggestions, setSuggestions] = useState([]);
     // Phase 2A: Active view tab
@@ -34,9 +56,22 @@ export default function App() {
     const { isMobile, isStandalone, isInstallable, promptInstall } = useMobile();
 
     useEffect(() => {
-        fetchItems();
-        fetchSuggestions();
+        // Initial load coordination
+        Promise.all([
+            refreshItems(),
+            fetchFollowups(),
+            fetchSuggestions()
+        ]).finally(() => setLoading(false));
     }, []);
+
+    const fetchFollowups = async () => {
+        try {
+            const data = await itemsApi.needsFollowup();
+            setNeedsFollowupIds(data.map(item => item.id));
+        } catch (err) {
+            console.error('Failed to load followups', err);
+        }
+    };
 
     const fetchSuggestions = async () => {
         try {
@@ -49,42 +84,25 @@ export default function App() {
         }
     };
 
-    const fetchItems = async () => {
-        try {
-            const [itemsData, followupData] = await Promise.all([
-                itemsApi.list(),
-                itemsApi.needsFollowup().catch(() => [])
-            ]);
-            setItems(itemsData);
-            setNeedsFollowupIds(followupData.map(item => item.id));
-            setError(null);
-        } catch (err) {
-            setError(err.message || 'Failed to load items');
-        } finally {
-            setLoading(false);
-        }
+    const handleItemCreated = async (newItemContent) => {
+        // useItems.createItem expects content string or object? 
+        // InboxInput passes string. useItems.createItem expects string.
+        await hookCreateItem(newItemContent);
     };
 
-    const handleItemCreated = (newItem) => {
-        setItems(prev => [newItem, ...prev]);
-    };
+    const handleItemUpdate = async (id, updates) => {
+        await hookUpdateItem(id, updates);
 
-    const handleItemUpdate = (id, updates) => {
+        // Custom logic for followups
         if (updates.status === 'done' || updates.snoozed_until) {
-            setItems(prev => prev.filter(item => item.id !== id));
             setNeedsFollowupIds(prev => prev.filter(itemId => itemId !== id));
-        } else {
-            setItems(prev => prev.map(item =>
-                item.id === id ? { ...item, ...updates } : item
-            ));
-            if (updates.follow_up_count !== undefined) {
-                setNeedsFollowupIds(prev => prev.filter(itemId => itemId !== id));
-            }
+        } else if (updates.follow_up_count !== undefined) {
+            setNeedsFollowupIds(prev => prev.filter(itemId => itemId !== id));
         }
     };
 
-    const handleItemDelete = (id) => {
-        setItems(prev => prev.filter(item => item.id !== id));
+    const handleItemDelete = async (id) => {
+        await hookDeleteItem(id);
         setNeedsFollowupIds(prev => prev.filter(itemId => itemId !== id));
     };
 
@@ -108,113 +126,112 @@ export default function App() {
 
             {/* Header with view tabs - Desktop only */}
             <header className={`border-b border-white/10 glass sticky top-0 z-40 ${isMobile ? 'py-2' : ''}`}>
-                <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className={isMobile ? 'text-2xl' : 'text-3xl'}>🚀</span>
-                        <div>
-                            <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl'}`}>LifePilot</h1>
-                            {!isMobile && <p className="text-xs text-surface-200/70">Smart Personal Life OS</p>}
+                <div className="max-w-7xl mx-auto px-4">
+                    {/* Top row: Logo, Search, Notification */}
+                    <div className="flex items-center justify-between py-3 gap-4">
+                        <div className="flex items-center gap-3 shrink-0">
+                            <span className={isMobile ? 'text-2xl' : 'text-3xl'}>🚀</span>
+                            <div>
+                                <h1 className={`font-bold text-white ${isMobile ? 'text-lg' : 'text-xl'}`}>LifePilot</h1>
+                                {!isMobile && <p className="text-xs text-surface-200/70">Smart Personal Life OS</p>}
+                            </div>
+                        </div>
+
+                        {/* Search - hide on mobile */}
+                        {!isMobile && <SearchBar onNavigate={(tab) => setActiveView(tab)} />}
+
+                        <div className="flex items-center gap-4 shrink-0">
+                            <NotificationBell />
+                            {!isMobile && <span className="text-sm text-surface-200/60 whitespace-nowrap">
+                                {new Date().toLocaleDateString('en-US', {
+                                    weekday: 'long',
+                                    month: 'short',
+                                    day: 'numeric'
+                                })}
+                            </span>}
                         </div>
                     </div>
 
-                    {/* Search - hide on mobile */}
-                    {!isMobile && <SearchBar onNavigate={(tab) => setActiveView(tab)} />}
+                    {/* Bottom row: Navigation Tabs - Desktop only */}
+                    {!isMobile && (
+                        <div className="pb-3 overflow-x-auto">
+                            <div className="flex items-center gap-1.5 flex-wrap min-w-max">
+                                <button
+                                    onClick={() => setActiveView('tasks')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'tasks'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    📋 Tasks
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('bookmarks')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'bookmarks'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    📚 Bookmarks
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('decisions')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'decisions'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    🎯 Decisions
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('review')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'review'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    📊 Review
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('people')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'people'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    👥 People
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('energy')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'energy'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    ⚡ Energy
+                                </button>
+                                <button
+                                    onClick={() => setActiveView('patterns')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'patterns'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    📊 Patterns
+                                </button>
 
-                    {/* View Tabs - Desktop only */}
-                    {!isMobile && <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setActiveView('tasks')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'tasks'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            📋 Tasks
-                        </button>
-                        <button
-                            onClick={() => setActiveView('bookmarks')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'bookmarks'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            📚 Bookmarks
-                        </button>
-                        <button
-                            onClick={() => setActiveView('decisions')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'decisions'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            🎯 Decisions
-                        </button>
-                        <button
-                            onClick={() => setActiveView('review')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'review'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            📊 Review
-                        </button>
-                        <button
-                            onClick={() => setActiveView('people')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'people'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            👥 People
-                        </button>
-                        <button
-                            onClick={() => setActiveView('energy')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'energy'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            ⚡ Energy
-                        </button>
-                        <button
-                            onClick={() => setActiveView('patterns')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'patterns'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            📊 Patterns
-                        </button>
-                        <button
-                            onClick={() => setActiveView('agent')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'agent'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            🤖 Agent
-                        </button>
-                        <button
-                            onClick={() => setActiveView('settings')}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm transition-all
-                                ${activeView === 'settings'
-                                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                                    : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
-                        >
-                            ⚙️ Settings
-                        </button>
-                    </div>}
-
-                    <div className="flex items-center gap-4">
-                        <NotificationBell />
-                        {!isMobile && <span className="text-sm text-surface-200/60">
-                            {new Date().toLocaleDateString('en-US', {
-                                weekday: 'long',
-                                month: 'short',
-                                day: 'numeric'
-                            })}
-                        </span>}
-                    </div>
+                                <button
+                                    onClick={() => setActiveView('settings')}
+                                    className={`px-3 py-1.5 rounded-lg font-medium text-sm transition-all whitespace-nowrap
+                                        ${activeView === 'settings'
+                                            ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                            : 'text-surface-200 hover:bg-white/5 hover:text-white'}`}
+                                >
+                                    ⚙️ Settings
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </header>
 
@@ -228,13 +245,13 @@ export default function App() {
                         </section>
 
                         {/* Error message */}
-                        {error && (
+                        {itemsError && (
                             <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 
                                 rounded-xl text-red-400 text-sm flex items-center gap-2">
                                 <span>⚠️</span>
-                                <span>{error}</span>
+                                <span>{itemsError.message || 'Failed to load items'}</span>
                                 <button
-                                    onClick={fetchItems}
+                                    onClick={refreshItems}
                                     className="ml-auto btn-ghost text-red-400 hover:text-red-300"
                                 >
                                     Retry
@@ -284,8 +301,6 @@ export default function App() {
                     <EnergyDashboard />
                 ) : activeView === 'patterns' ? (
                     <PatternDashboard />
-                ) : activeView === 'agent' ? (
-                    <AgentChat />
                 ) : activeView === 'settings' ? (
                     <CalendarSettings />
                 ) : (
@@ -314,6 +329,9 @@ export default function App() {
                 suggestions={suggestions}
                 onNavigate={(view) => setActiveView(view)}
             />
+
+            {/* Floating AI Assistant */}
+            <FloatingAgent />
         </div>
     );
 }

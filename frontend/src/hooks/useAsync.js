@@ -1,49 +1,55 @@
 /**
- * useAsync - Generic hook for async data fetching
+ * useAsync - Generic hook for async operations with state
  */
 import { useState, useCallback, useEffect } from 'react';
 
-/**
- * Hook for managing async operations with loading/error states
- * 
- * @param {Function} asyncFn - Async function to call
- * @param {boolean} immediate - Whether to call immediately on mount
- * @returns {Object} { data, loading, error, execute, reset }
- */
-export default function useAsync(asyncFn, immediate = false) {
-    const [state, setState] = useState({
-        data: null,
-        loading: immediate,
-        error: null
-    });
+export default function useAsync(asyncFunction, immediate = true) {
+    const [status, setStatus] = useState('idle');
+    const [value, setValue] = useState(null);
+    const [error, setError] = useState(null);
 
-    const execute = useCallback(async (...args) => {
-        setState(prev => ({ ...prev, loading: true, error: null }));
+    // The execute function wraps asyncFunction and handles setting state
+    // useCallback ensures it doesn't change on every render unless asyncFunction changes
+    const execute = useCallback(
+        async (...args) => {
+            setStatus('pending');
+            setError(null);
 
-        try {
-            const result = await asyncFn(...args);
-            setState({ data: result, loading: false, error: null });
-            return result;
-        } catch (error) {
-            const errorMessage = error.message || 'An error occurred';
-            setState(prev => ({ ...prev, loading: false, error: errorMessage }));
-            throw error;
-        }
-    }, [asyncFn]);
+            try {
+                const response = await asyncFunction(...args);
+                setValue(response);
+                setStatus('success');
+                return response;
+            } catch (error) {
+                setError(error);
+                setStatus('error');
+                // Log error for debugging but don't crash app
+                console.error('Async operation failed:', error);
+                throw error;
+            }
+        },
+        [asyncFunction]
+    );
 
-    const reset = useCallback(() => {
-        setState({ data: null, loading: false, error: null });
-    }, []);
-
+    // Call execute immediately if requested
     useEffect(() => {
         if (immediate) {
             execute();
         }
-    }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+    }, [execute, immediate]);
 
     return {
-        ...state,
         execute,
-        reset
+        status,
+        value,
+        error,
+        isLoading: status === 'pending',
+        isSuccess: status === 'success',
+        isError: status === 'error',
+        reset: () => {
+            setStatus('idle');
+            setValue(null);
+            setError(null);
+        }
     };
 }

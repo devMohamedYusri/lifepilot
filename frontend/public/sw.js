@@ -3,7 +3,7 @@
  * Provides offline support and caching for PWA functionality
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v4-ignore-dev';
 const STATIC_CACHE = `lifepilot-static-${CACHE_VERSION}`;
 const DYNAMIC_CACHE = `lifepilot-dynamic-${CACHE_VERSION}`;
 const API_CACHE = `lifepilot-api-${CACHE_VERSION}`;
@@ -76,6 +76,14 @@ self.addEventListener('fetch', event => {
         return;
     }
 
+    // SKIP VITE/DEV REQUESTS (Critical for localhost development)
+    if (url.pathname.includes('@vite') ||
+        url.pathname.includes('@react-refresh') ||
+        url.pathname.includes('node_modules') ||
+        url.pathname.startsWith('/src/')) {
+        return; // Let browser handle it normally
+    }
+
     // API requests - Network first, fall back to cache
     if (url.pathname.startsWith('/api/')) {
         event.respondWith(networkFirst(request, API_CACHE));
@@ -113,6 +121,7 @@ async function cacheFirst(request, cacheName) {
         }
         return response;
     } catch (error) {
+        console.log('[SW] Cache first failed:', error);
         return offlineResponse();
     }
 }
@@ -127,6 +136,7 @@ async function networkFirst(request, cacheName) {
         }
         return response;
     } catch (error) {
+        console.log('[SW] Network first failed:', error);
         const cached = await caches.match(request);
         if (cached) {
             return cached;
@@ -136,20 +146,41 @@ async function networkFirst(request, cacheName) {
 }
 
 // Stale while revalidate strategy
+// Stale while revalidate strategy
 async function staleWhileRevalidate(request, cacheName) {
     const cached = await caches.match(request);
 
-    const fetchPromise = fetch(request)
+    // We always want to revalidate in the background
+    // This promise will NEVER reject, it will return response or null on error
+    const networkPromise = fetch(request)
         .then(response => {
             if (response.ok) {
-                const cache = caches.open(cacheName);
-                cache.then(c => c.put(request, response.clone()));
+                // Clone carefully
+                const cacheClone = response.clone();
+                caches.open(cacheName).then(cache => cache.put(request, cacheClone));
             }
             return response;
         })
-        .catch(() => null);
+        .catch(error => {
+            console.log('[SW] SWR Network fail:', error);
+            return null; // Signals failure nicely
+        });
 
-    return cached || fetchPromise || offlineResponse();
+    // If we have content in cache, return it immediately
+    if (cached) {
+        return cached;
+    }
+
+    // No cache? We must wait for network
+    const networkResponse = await networkPromise;
+
+    // If network returned a valid response, return it
+    if (networkResponse) {
+        return networkResponse;
+    }
+
+    // If network failed (returned null), show offline page
+    return offlineResponse();
 }
 
 // Check if request is for a static asset
