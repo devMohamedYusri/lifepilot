@@ -19,6 +19,8 @@ logger = setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize database and validate settings on startup."""
+    import os
+    
     # Validate required settings
     errors = settings.validate()
     if errors:
@@ -30,29 +32,47 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info(f"LifePilot API started in {settings.environment} mode")
     
-    # Start background services
-    from services.scheduler_service import get_scheduler
-    from services.job_queue_service import get_job_queue
-    from services.proactive_service import PROACTIVE_HANDLERS
+    # Skip background services on WSGI hosts (PythonAnywhere, etc.)
+    # Background workers don't work well with WSGI adapters
+    skip_background = os.getenv("SKIP_BACKGROUND_SERVICES", "false").lower() == "true"
     
-    scheduler = get_scheduler()
-    job_queue = get_job_queue()
-    
-    # Register task handlers
-    for task_type, handler in PROACTIVE_HANDLERS.items():
-        scheduler.register_handler(task_type, handler)
-    
-    # Start scheduler and job queue automatically
-    scheduler.start()
-    job_queue.start()
-    logger.info("Background services started automatically")
+    if not skip_background:
+        try:
+            # Start background services
+            from services.scheduler_service import get_scheduler
+            from services.job_queue_service import get_job_queue
+            from services.proactive_service import PROACTIVE_HANDLERS
+            
+            scheduler = get_scheduler()
+            job_queue = get_job_queue()
+            
+            # Register task handlers
+            for task_type, handler in PROACTIVE_HANDLERS.items():
+                scheduler.register_handler(task_type, handler)
+            
+            # Start scheduler and job queue automatically
+            scheduler.start()
+            job_queue.start()
+            logger.info("Background services started automatically")
+        except Exception as e:
+            logger.warning(f"Could not start background services: {e}")
+    else:
+        logger.info("Background services skipped (SKIP_BACKGROUND_SERVICES=true)")
     
     yield
     
     # Cleanup on shutdown
-    scheduler.stop()
-    job_queue.stop()
-    logger.info("Background services stopped")
+    if not skip_background:
+        try:
+            from services.scheduler_service import get_scheduler
+            from services.job_queue_service import get_job_queue
+            scheduler = get_scheduler()
+            job_queue = get_job_queue()
+            scheduler.stop()
+            job_queue.stop()
+            logger.info("Background services stopped")
+        except:
+            pass
 
 
 # Create FastAPI app
