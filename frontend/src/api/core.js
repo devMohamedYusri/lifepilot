@@ -4,7 +4,7 @@
 
 // Use environment variable for production, fallback to /api for local dev with proxy
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
-const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const DEFAULT_TIMEOUT = 120000; // 120 seconds for slow free-tier hosting
 
 /**
  * Generic fetch wrapper with error handling and timeout
